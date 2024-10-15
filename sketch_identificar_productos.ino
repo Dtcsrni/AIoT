@@ -18,7 +18,7 @@
 
 /* Credenciales WiFi */
 const char* ssid = "Cybersys_Ext";
-const char* contrasena = "Sjmahpe122512";
+const char* contrasena = "";
 
 /* Broker MQTT */
 const char* servidor_mqtt = "192.168.1.7";
