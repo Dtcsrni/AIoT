@@ -17,7 +17,7 @@
 #define CAMERA_MODEL_AI_THINKER // Has PSRAM
 
 /* Credenciales WiFi */
-const char* ssid = "Cybersys_Ext";
+const char* ssid = "";
 const char* contrasena = "";
 
 /* Broker MQTT */
