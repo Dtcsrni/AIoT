@@ -1,6 +1,6 @@
-//Erick Vega
+//I.S.C. Erick Vega
 // These sketches are tested with 2.0.4 ESP32 Arduino Core
-// https://github.com/espressif/arduino-esp32/releases/tag/2.0.4
+
 
 /* Includes ---------------------------------------------------------------- */
 #include <IoT_inferencing.h>
@@ -120,6 +120,31 @@ bool ei_camera_init(void);
 void ei_camera_deinit(void);
 bool ei_camera_capture(uint32_t img_width, uint32_t img_height, uint8_t *out_buf) ;
 
+/* Funciones de WiFi y MQTT */
+void conectarWiFi() {
+    Serial.print("Conectando a WiFi...");
+    WiFi.begin(ssid, contrasena);
+    while (WiFi.status() != WL_CONNECTED) {
+        delay(1000);
+        Serial.print(".");
+    }
+    Serial.println("\nConectado a WiFi.");
+}
+
+void conectarMQTT() {
+    cliente.setServer(servidor_mqtt, puerto_mqtt);
+    while (!cliente.connected()) {
+        Serial.println("Conectando a MQTT...");
+        if (cliente.connect("ESP32Cam")) {
+            Serial.println("Conectado al broker MQTT.");
+        } else {
+            Serial.print("Fallo MQTT, rc=");
+            Serial.print(cliente.state());
+            delay(5000);
+        }
+    }
+}
+
 /**
 * @brief      Arduino setup function
 */
@@ -127,6 +152,8 @@ void setup()
 {
     // put your setup code here, to run once:
     Serial.begin(115200);
+    conectarWiFi();
+    conectarMQTT();
     //comment out the below line to start inference immediately after upload
     while (!Serial);
     Serial.println("Edge Impulse Inferencing Demo");
@@ -138,7 +165,7 @@ void setup()
     }
 
     ei_printf("\nStarting continious inference in 2 seconds...\n");
-    ei_sleep(2000);
+    ei_sleep(1000);
 }
 
 /**
@@ -199,6 +226,22 @@ void loop()
                 bb.y,
                 bb.width,
                 bb.height);
+                
+        // Crear objeto JSON con label y valor
+        StaticJsonDocument<256> jsonDoc;
+        jsonDoc["label"] = bb.label;
+        jsonDoc["value"] = bb.value;
+
+        char jsonBuffer[256];
+        serializeJson(jsonDoc, jsonBuffer);
+
+        // Publicar en el tema MQTT
+        if (cliente.publish(tema_mqtt, jsonBuffer)) {
+            Serial.println("Mensaje MQTT enviado:");
+            Serial.println(jsonBuffer);
+        } else {
+            Serial.println("Error al enviar mensaje MQTT.");
+        }
     }
 
     // Print the prediction results (classification)
