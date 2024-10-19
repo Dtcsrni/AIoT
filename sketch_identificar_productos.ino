@@ -1,27 +1,6 @@
-/* Edge Impulse Arduino examples
- * Copyright (c) 2022 EdgeImpulse Inc.
- *
- * Permission is hereby granted, free of charge, to any person obtaining a copy
- * of this software and associated documentation files (the "Software"), to deal
- * in the Software without restriction, including without limitation the rights
- * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
- * copies of the Software, and to permit persons to whom the Software is
- * furnished to do so, subject to the following conditions:
- *
- * The above copyright notice and this permission notice shall be included in
- * all copies or substantial portions of the Software.
- *
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
- * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
- * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
- * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
- * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
- * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
- * SOFTWARE.
- */
-
-// These sketches are tested with 2.0.4 ESP32 Arduino Core
-// https://github.com/espressif/arduino-esp32/releases/tag/2.0.4
+/* I.S.C. Erick Vega
+Sketch para cámara Espcam con identificador de imagenes por IA
+ 
 
 /* Includes ---------------------------------------------------------------- */
 #include <IoT_inferencing.h>
@@ -30,6 +9,7 @@
 #include <PubSubClient.h>
 #include <ArduinoJson.h>
 #include "esp_camera.h"
+#include <ArduinoOTA.h>
 
 // Select camera model - find more camera models in camera_pins.h file here
 // https://github.com/espressif/arduino-esp32/blob/master/libraries/ESP32/examples/Camera/CameraWebServer/camera_pins.h
@@ -37,31 +17,40 @@
 //#define CAMERA_MODEL_ESP_EYE // Has PSRAM
 #define CAMERA_MODEL_AI_THINKER  // Has PSRAM
 
-/* Credenciales WiFi */
-const char *ssid = "";
-const char *contrasena = "";
+// Redes Wi-Fi disponibles
+const char *ssidPrimaria = "Cybersys_Ext";
+const char *passPrimaria = "Sjmahpe122512";
+
+const char *ssidSecundaria = "Cybersys_Tlilkuautli";
+const char *passSecundaria = "Sjmahpe122512";
+
+const char *ssidTerciaria = "Cybersys";
+const char *passTerciaria = "Sjmahpe122512";
+
+// Variables de control para reconexión WiFi
+unsigned long ultimoIntentoWiFi = 0;
+const unsigned long intervaloReintentoWiFi = 6666;  // 6.666 segundos entre intentos
+int redActual = 0;                                  // 0 = Principal, 1 = Secundaria, 2 = Terciaria
+
 
 /* Broker MQTT */
-const char *servidor_mqtt = "";
+const char *servidor_mqtt = "192.168.1.7";
 const int puerto_mqtt = 1883;
 const char *tema_mqtt = "RN/clasificacion-imagen/ErickVega";
-
-unsigned long ultimoIntentoWiFi = 0;
 unsigned long ultimoIntentoMQTT = 0;
-
-String ultimoLabel = "";                    // Almacena el último label enviado
-unsigned long ultimoEnvio = 0;              // Almacena el tiempo del último envío
-const unsigned long intervaloEnvio = 8000;  // 6 segundos de intervalo mínimo de envio entre mensajes MQTT
-
-const unsigned long intervaloReintentoWiFi = 6000;  // 6 segundos entre intentos WiFi
 const unsigned long intervaloReintentoMQTT = 6000;  // 6 segundos entre intentos MQTT
+
+String ultimoLabel = "";                     // Almacena el último label enviado
+unsigned long ultimoEnvio = 0;               // Almacena el tiempo del último envío
+const unsigned long intervaloEnvio = 15000;  // 6 segundos de intervalo mínimo de envio entre mensajes MQTT del mismo producto
+
 
 WiFiClient clienteEsp;
 PubSubClient cliente(clienteEsp);
 
 
 //#define CAMERA_MODEL_ESP_EYE  // Has PSRAM
-#define CAMERA_MODEL_AI_THINKER // Has PSRAM
+#define CAMERA_MODEL_AI_THINKER  // Has PSRAM
 
 #if defined(CAMERA_MODEL_ESP_EYE)
 #define PWDN_GPIO_NUM -1
@@ -154,15 +143,39 @@ void ei_camera_deinit(void);
 bool ei_camera_capture(uint32_t img_width, uint32_t img_height, uint8_t *out_buf);
 
 
-/* Funciones de WiFi y MQTT */
 void conectarWiFi() {
-  if (WiFi.status() == WL_CONNECTED) return;  // Ya conectado, salir
+  // Si ya está conectado, salir
+  if (WiFi.status() == WL_CONNECTED) return;
 
-  if (millis() - ultimoIntentoWiFi < intervaloReintentoWiFi) return;  // Aún no es tiempo
+  // Esperar al siguiente intento según el intervalo
+  if (millis() - ultimoIntentoWiFi < intervaloReintentoWiFi) return;
 
   ultimoIntentoWiFi = millis();  // Actualiza el tiempo del último intento
-  Serial.println("Intentando conectar a WiFi...");
-  WiFi.begin(ssid, contrasena);
+
+  // Seleccionar red según el valor de redActual
+  const char *ssid;
+  const char *pass;
+
+  switch (redActual) {
+    case 0:
+      ssid = ssidPrimaria;
+      pass = passPrimaria;
+      Serial.println("Intentando conectar a la red principal...");
+      break;
+    case 1:
+      ssid = ssidSecundaria;
+      pass = passSecundaria;
+      Serial.println("Intentando conectar a la red secundaria...");
+      break;
+    case 2:
+      ssid = ssidTerciaria;
+      pass = passTerciaria;
+      Serial.println("Intentando conectar a la red terciaria...");
+      break;
+  }
+
+  // Intentar conexión
+  WiFi.begin(ssid, pass);
 
   unsigned long tiempoInicio = millis();
   while (WiFi.status() != WL_CONNECTED && millis() - tiempoInicio < 10000) {
@@ -171,13 +184,15 @@ void conectarWiFi() {
   }
 
   if (WiFi.status() == WL_CONNECTED) {
-    Serial.println("\nConectado a WiFi.");
+    Serial.println("\nConectado a Wi-Fi.");
     Serial.print("Dirección IP: ");
     Serial.println(WiFi.localIP());
   } else {
-    Serial.println("\nNo se pudo conectar a WiFi.");
+    Serial.println("\nNo se pudo conectar a Wi-Fi.");
+    redActual = (redActual + 1) % 3;  // Cambiar a la siguiente red en la lista
   }
 }
+
 
 void conectarMQTT() {
   if (WiFi.status() != WL_CONNECTED) return;  // No hay WiFi, salir
@@ -203,11 +218,11 @@ void conectarMQTT() {
 */
 void setup() {
   // put your setup code here, to run once:
-  // put your setup code here, to run once:
   Serial.begin(115200);
   WiFi.mode(WIFI_STA);            // Configura WiFi en modo estación (cliente)
   cliente.setClient(clienteEsp);  // Vincula el cliente WiFi con MQT
-
+  configurarOTA();                //Configura OTA
+  ei_sleep(500);
   //comment out the below line to start inference immediately after upload
   while (!Serial)
     ;
@@ -231,6 +246,10 @@ void loop() {
   conectarWiFi();  // Intenta conectar a WiFi
   conectarMQTT();  // Intenta conectar a MQTT si hay WiFi
   cliente.loop();  // Mantiene la conexión MQTT activa
+
+  // Se llama continuamente para gestionar OTA
+  ArduinoOTA.handle();
+
   // instead of wait_ms, we'll wait on the signal, this allows threads to cancel us...
   if (ei_sleep(5) != EI_IMPULSE_OK) {
     return;
@@ -250,6 +269,7 @@ void loop() {
 
   if (ei_camera_capture((size_t)EI_CLASSIFIER_INPUT_WIDTH, (size_t)EI_CLASSIFIER_INPUT_HEIGHT, snapshot_buf) == false) {
     ei_printf("Failed to capture image\r\n");
+    enviarMQTT(tema_mqtt, "fallo", 0);
     free(snapshot_buf);
     return;
   }
@@ -260,6 +280,7 @@ void loop() {
   EI_IMPULSE_ERROR err = run_classifier(&signal, &result, debug_nn);
   if (err != EI_IMPULSE_OK) {
     ei_printf("ERR: Failed to run classifier (%d)\n", err);
+    enviarMQTT(tema_mqtt, "fallo classifier", 0);
     return;
   }
 
@@ -319,10 +340,41 @@ void loop() {
   free(snapshot_buf);
 }
 
+// Función para inicializar OTA
+void configurarOTA() {
+  ArduinoOTA.onStart([]() {
+    String tipo = (ArduinoOTA.getCommand() == U_FLASH)
+                    ? "Actualización de firmware"
+                    : "Actualización del sistema de archivos";
+    Serial.println("Inicio de " + tipo);
+  });
+
+  ArduinoOTA.onEnd([]() {
+    Serial.println("\nActualización completada.");
+  });
+
+  ArduinoOTA.onProgress([](unsigned int progreso, unsigned int total) {
+    Serial.printf("Progreso: %u%%\r", (progreso * 100) / total);
+  });
+
+  ArduinoOTA.onError([](ota_error_t error) {
+    Serial.printf("Error [%u]: ", error);
+    switch (error) {
+      case OTA_AUTH_ERROR: Serial.println("Fallo en autenticación"); break;
+      case OTA_BEGIN_ERROR: Serial.println("Error al iniciar"); break;
+      case OTA_CONNECT_ERROR: Serial.println("Error de conexión"); break;
+      case OTA_RECEIVE_ERROR: Serial.println("Error de recepción"); break;
+      case OTA_END_ERROR: Serial.println("Error al finalizar"); break;
+    }
+  });
+
+  ArduinoOTA.begin();
+  Serial.println("OTA listo para recibir actualizaciones.");
+}
 
 void enviarMQTT(String tema_mqtt, String label, float value) {
   // Verifica si es el mismo label y si no ha pasado el intervalo de 6 segundos
-  if ((label == ultimoLabel && millis() - ultimoEnvio < intervaloEnvio) || label == "background") {
+  if ((label == ultimoLabel && millis() - ultimoEnvio < intervaloEnvio)) {
     return;  // Si es el mismo y no ha pasado el tiempo, no enviar
   }
 
