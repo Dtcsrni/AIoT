@@ -10,7 +10,6 @@ Sketch para cámara Espcam con identificador de imagenes por IA
 #include <ArduinoJson.h>
 #include "esp_camera.h"
 #include <ArduinoOTA.h>
-
 // Select camera model - find more camera models in camera_pins.h file here
 // https://github.com/espressif/arduino-esp32/blob/master/libraries/ESP32/examples/Camera/CameraWebServer/camera_pins.h
 
@@ -161,16 +160,19 @@ void conectarWiFi() {
       ssid = ssidPrimaria;
       pass = passPrimaria;
       Serial.println("Intentando conectar a la red principal...");
+
       break;
     case 1:
       ssid = ssidSecundaria;
       pass = passSecundaria;
       Serial.println("Intentando conectar a la red secundaria...");
+
       break;
     case 2:
       ssid = ssidTerciaria;
       pass = passTerciaria;
       Serial.println("Intentando conectar a la red terciaria...");
+
       break;
   }
 
@@ -187,18 +189,18 @@ void conectarWiFi() {
     Serial.println("\nConectado a Wi-Fi.");
     Serial.print("Dirección IP: ");
     Serial.println(WiFi.localIP());
+
   } else {
     Serial.println("\nNo se pudo conectar a Wi-Fi.");
+
     redActual = (redActual + 1) % 3;  // Cambiar a la siguiente red en la lista
   }
 }
 
 
 void conectarMQTT() {
-  if (WiFi.status() != WL_CONNECTED) return;  // No hay WiFi, salir
-
-  if (cliente.connected()) return;  // Ya conectado a MQTT, salir
-
+  if (WiFi.status() != WL_CONNECTED) return;                          // No hay WiFi, salir
+  if (cliente.connected()) return;                                    // Ya conectado a MQTT, salir
   if (millis() - ultimoIntentoMQTT < intervaloReintentoMQTT) return;  // Aún no es tiempo
 
   ultimoIntentoMQTT = millis();  // Actualiza el tiempo del último intento
@@ -223,18 +225,22 @@ void setup() {
   cliente.setClient(clienteEsp);  // Vincula el cliente WiFi con MQT
   configurarOTA();                //Configura OTA
   ei_sleep(500);
+  // Initialize the server (telnet or web socket) of RemoteDebug
+
+
   //comment out the below line to start inference immediately after upload
   while (!Serial)
     ;
   Serial.println("Edge Impulse Inferencing Demo");
+
   if (ei_camera_init() == false) {
     ei_printf("Failed to initialize Camera!\r\n");
   } else {
     ei_printf("Camera initialized\r\n");
   }
 
-  ei_printf("\nStarting continious inference in 2 seconds...\n");
-  ei_sleep(2000);
+  ei_printf("\nStarting continious inference in 1 seconds...\n");
+  ei_sleep(1000);
 }
 
 /**
@@ -260,6 +266,7 @@ void loop() {
   // check if allocation was successful
   if (snapshot_buf == nullptr) {
     ei_printf("ERR: Failed to allocate snapshot buffer!\n");
+
     return;
   }
 
@@ -280,6 +287,7 @@ void loop() {
   EI_IMPULSE_ERROR err = run_classifier(&signal, &result, debug_nn);
   if (err != EI_IMPULSE_OK) {
     ei_printf("ERR: Failed to run classifier (%d)\n", err);
+
     enviarMQTT(tema_mqtt, "fallo classifier", 0);
     return;
   }
@@ -336,7 +344,6 @@ void loop() {
   }
 #endif
 
-
   free(snapshot_buf);
 }
 
@@ -360,11 +367,21 @@ void configurarOTA() {
   ArduinoOTA.onError([](ota_error_t error) {
     Serial.printf("Error [%u]: ", error);
     switch (error) {
-      case OTA_AUTH_ERROR: Serial.println("Fallo en autenticación"); break;
-      case OTA_BEGIN_ERROR: Serial.println("Error al iniciar"); break;
-      case OTA_CONNECT_ERROR: Serial.println("Error de conexión"); break;
-      case OTA_RECEIVE_ERROR: Serial.println("Error de recepción"); break;
-      case OTA_END_ERROR: Serial.println("Error al finalizar"); break;
+      case OTA_AUTH_ERROR:
+        Serial.println("Fallo en autenticación");
+        break;
+      case OTA_BEGIN_ERROR:
+        Serial.println("Error al iniciar");
+        break;
+      case OTA_CONNECT_ERROR:
+        Serial.println("Error de conexión");
+        break;
+      case OTA_RECEIVE_ERROR:
+        Serial.println("Error de recepción");
+        break;
+      case OTA_END_ERROR:
+        Serial.println("Error al finalizar");
+        break;
     }
   });
 
