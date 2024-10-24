@@ -1,0 +1,171 @@
+services:
+  mosquitto:
+    image: eclipse-mosquitto:latest
+    container_name: mosquitto
+    ports:
+      - "1883:1883"
+      - "9001:9001"
+    volumes:
+      - /home/orangepi/IOTstack/mosquitto_data:/mosquitto/data
+      - /home/orangepi/IOTstack/mosquitto_config:/mosquitto/config
+    restart: always
+    environment:
+      - TZ=America/Mexico_City
+    healthcheck:
+      test: ["CMD-SHELL", "mosquitto_pub -h localhost -t healthcheck -m test || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    networks:
+      - mosquitto_net
+      - common_net
+
+  mysql:
+    image: mysql:latest
+    container_name: mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: root_password
+      MYSQL_DATABASE: my_database
+      MYSQL_USER: my_user
+      MYSQL_PASSWORD: my_password
+    ports:
+      - "3306:3306"
+    volumes:
+      - /home/orangepi/IOTstack/mysql_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h localhost -u root -p${MYSQL_ROOT_PASSWORD} || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 2
+    restart: always
+    networks:
+      - mysql_net
+      - common_net
+
+  web:
+    image: nginx:latest
+    container_name: webserver
+    ports:
+      - "8080:80"
+    volumes:
+      - /home/orangepi/IOTstack/nginx_data:/usr/share/nginx/html:ro
+      - /home/orangepi/IOTstack/nginx_cache:/var/cache/nginx
+    restart: always
+    environment:
+      - NGINX_ENTRYPOINT_QUIET_LOGS=1
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    tmpfs:
+      - /run
+      - /tmp
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:80/ || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    networks:
+      - web_net
+      - common_net
+
+  phpmyadmin:
+    image: arm64v8/phpmyadmin:latest
+    container_name: phpmyadmin_container
+    environment:
+      PMA_HOST: mysql
+      MYSQL_ROOT_PASSWORD: root_password
+    ports:
+      - "8081:80"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:80/ || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    restart: always
+    networks:
+      - phpmyadmin_net
+      - common_net
+
+  nodered:
+    image: nodered/node-red:latest
+    container_name: nodered
+    volumes:
+      - /home/orangepi/IOTstack/nodered_data:/data
+    restart: always
+    network_mode: host
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    environment:
+      - TZ=America/Mexico_City
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:1880/ || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  influxdb:
+    image: influxdb:latest
+    container_name: influxdb
+    ports:
+      - "8086:8086"
+    environment:
+      - INFLUXDB_DB=iotdatos
+      - INFLUXDB_ADMIN_USER=erick
+      - INFLUXDB_ADMIN_PASSWORD=sjmahpe122512
+      - TZ=America/Mexico_City
+    volumes:
+      - /home/orangepi/IOTstack/influxdb_data:/var/lib/influxdb
+    restart: always
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8086/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    networks:
+      - influxdb_net
+      - common_net
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: grafana
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_USER=erick
+      - GF_SECURITY_ADMIN_PASSWORD=sjmahpe122512
+      - TZ=America/Mexico_City
+    volumes:
+      - /home/orangepi/IOTstack/grafana_data:/var/lib/grafana
+    restart: always
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:3000/ || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    networks:
+      - grafana_net
+      - common_net
+
+networks:
+  mosquitto_net:
+    driver: bridge
+  mysql_net:
+    driver: bridge
+  web_net:
+    driver: bridge
+  phpmyadmin_net:
+    driver: bridge
+  influxdb_net:
+    driver: bridge
+  grafana_net:
+    driver: bridge
+  common_net:
+    driver: bridge
+
+volumes:
+  mosquitto_data:
+  mosquitto_config:
+  nodered_data:
+  influxdb_data:
+  grafana_data:
+  nginx_data:
